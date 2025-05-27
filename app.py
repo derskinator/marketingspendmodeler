@@ -15,7 +15,6 @@ shop_files = st.sidebar.file_uploader(
 meta_file = st.sidebar.file_uploader("Upload Meta spend CSV", type="csv")
 google_file = st.sidebar.file_uploader("Upload Google spend CSV", type="csv")
 
-# Process when all files are provided
 if shop_files and meta_file and google_file:
     # --- Shopify Data Ingestion ---
     shop_dfs = []
@@ -59,7 +58,7 @@ if shop_files and meta_file and google_file:
     st.subheader("Merged Sales & Spend Data")
     st.dataframe(merged_df)
 
-    # --- Regression Results ---
+    # --- Regression Results by Channel ---
     st.subheader("Regression Results by Channel")
     coefs = pd.DataFrame({
         'Coefficient': model.params,
@@ -82,9 +81,22 @@ if shop_files and meta_file and google_file:
         meta_input = st.slider("Meta Spend", float(meta_min), float(meta_max), float((meta_min+meta_max)/2))
         google_input = st.slider("Google Spend", float(google_min), float(google_max), float((google_min+google_max)/2))
         submit = st.form_submit_button("Estimate Sales")
+
     if submit:
         prediction = forecast_fn(meta_input, google_input)
         st.metric(label="Predicted Direct Sales", value=f"${prediction:,.2f}")
+
+        # --- Estimated Sales by Month ---
+        st.subheader("Estimated Direct Sales by Month")
+        est_df = merged_df[['Month Start']].copy()
+        est_df['Estimated Sales'] = est_df.apply(
+            lambda row: forecast_fn(meta_input, google_input), axis=1
+        )
+        # Line chart of estimated sales
+        st.line_chart(est_df.set_index('Month Start')['Estimated Sales'])
+        # Month-by-month breakdown table
+        est_df['Month'] = est_df['Month Start'].dt.strftime('%Y-%m')
+        st.dataframe(est_df[['Month', 'Estimated Sales']].set_index('Month'))
 
     # --- Historical vs Fitted Chart ---
     st.subheader("Historical vs Fitted Direct Sales")
