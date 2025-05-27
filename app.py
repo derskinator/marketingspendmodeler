@@ -138,16 +138,4 @@ if shop_files and meta_file and google_file:
 else:
     st.info("Please upload Shopify, Meta, and Google spend CSVs to run the analysis.")```
 
----
-
-**Next Steps:**
-
-1. Ensure both files live side-by-side in your GitHub repo.  
-2. Update your `requirements.txt` to include `streamlit`, `pandas`, `statsmodels`, `numpy`.  
-3. Push and let Streamlit rebuild.  
-
-This fully encapsulates data ingestion, log-skew regression on **Total Sales**, plain-language summaries, scenario forecasting, and charts.
-
-
-
 
