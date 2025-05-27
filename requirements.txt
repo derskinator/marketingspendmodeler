@@ -1,0 +1,5 @@
+streamlit>=1.XX.0
+pandas>=1.3.0
+statsmodels>=0.13.0
+numpy>=1.21.0
+scikit-learn>=1.1.0
