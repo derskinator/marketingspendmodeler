@@ -66,14 +66,14 @@ if shop_files and meta_file and google_file:
     merged_df = load_and_prepare_data()
 
     # Regression
-    model, _ = run_regression(merged_df)
+    model, forecast_fn = run_regression(merged_df)
 
     # Display merged data
     st.subheader("Merged Sales & Spend Data")
     st.dataframe(merged_df)
 
-    # Regression results by channel
-    st.subheader("Regression Results")
+    # Regression results
+    st.subheader("Regression Results by Channel")
     coefs = pd.DataFrame({
         'Coefficient': model.params,
         'p-value': model.pvalues
@@ -83,23 +83,33 @@ if shop_files and meta_file and google_file:
 
     # Scenario forecasting: percent adjustments
     st.subheader("Scenario Forecast")
-    st.markdown("Adjust the percentage of historical spend to see month-by-month impact on Direct Sales.")
+    st.markdown("Adjust the percentage of historical spend to see month-by-month impact on Direct Sales and see actual spend values.")
     meta_pct = st.slider("Meta Spend (% of historical)", 0, 200, 100)
     google_pct = st.slider("Google Spend (% of historical)", 0, 200, 100)
     if st.button("Run Scenario Forecast"):
         params = model.params
-        scenario = merged_df[['Month Start']].copy()
+        scenario = merged_df[['Month Start', 'Meta Spend', 'Google Spend']].copy()
+        # calculate scenario spend amounts
+        scenario['Scenario Meta Spend'] = scenario['Meta Spend'] * meta_pct / 100
+        scenario['Scenario Google Spend'] = scenario['Google Spend'] * google_pct / 100
+        # calculate estimated sales
         scenario['Estimated Sales'] = (
             params['const']
-            + params['Meta Spend'] * merged_df['Meta Spend'] * meta_pct / 100
-            + params['Google Spend'] * merged_df['Google Spend'] * google_pct / 100
+            + params['Meta Spend'] * scenario['Scenario Meta Spend']
+            + params['Google Spend'] * scenario['Scenario Google Spend']
         )
-        # Chart
+        # Chart of scenario estimated sales
         st.subheader("Scenario: Estimated Direct Sales by Month")
         st.line_chart(scenario.set_index('Month Start')['Estimated Sales'])
-        # Table breakdown
+        # Table: Month, historical spend, scenario spend, estimated sales
         scenario['Month'] = scenario['Month Start'].dt.strftime('%Y-%m')
-        st.dataframe(scenario.set_index('Month')[['Estimated Sales']])
+        breakdown = scenario.set_index('Month')[[
+            'Meta Spend', 'Scenario Meta Spend',
+            'Google Spend', 'Scenario Google Spend',
+            'Estimated Sales'
+        ]]
+        st.subheader("Month-by-Month Breakdown")
+        st.dataframe(breakdown)
 
     # Historical vs fitted
     st.subheader("Historical vs Fitted Direct Sales")
@@ -109,3 +119,4 @@ if shop_files and meta_file and google_file:
     st.line_chart(chart_df)
 else:
     st.info("Please upload Shopify, Meta, and Google CSVs to run the analysis.")
+
