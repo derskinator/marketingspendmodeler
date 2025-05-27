@@ -136,6 +136,6 @@ if shop_files and meta_file and google_file:
     st.line_chart(hist_chart)
 
 else:
-    st.info("Please upload Shopify, Meta, and Google spend CSVs to run the analysis.")```
+    st.info("Please upload Shopify, Meta, and Google spend CSVs to run the analysis.")
 
 
