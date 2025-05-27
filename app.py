@@ -50,7 +50,8 @@ def load_and_prepare_data():
     )
     google_clean = google_raw.rename(columns={'Cost': 'Google Spend'})[['Month Start', 'Google Spend']]
 
-    # Merge all\merged_df = merge_spend_data(total_sales_df, meta_clean, google_clean)
+    # Merge all
+    merged_df = merge_spend_data(total_sales_df, meta_clean, google_clean)
     return merged_df
 
 # Run when files are uploaded
