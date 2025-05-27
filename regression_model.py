@@ -45,8 +45,7 @@ def merge_spend_data(sales_df: pd.DataFrame,
     df = sales_df.copy()
     df = pd.merge(df, meta_df, on='Month Start', how='left')
     df = pd.merge(df, google_df, on='Month Start', how='left')
-    df = df.sort_values('Month Start').reset_index(drop=True)
-    return df
+    return df.sort_values('Month Start').reset_index(drop=True)
 
 def run_regression(df: pd.DataFrame, transform: str = 'log') -> sm.regression.linear_model.RegressionResultsWrapper:
     """
@@ -54,25 +53,22 @@ def run_regression(df: pd.DataFrame, transform: str = 'log') -> sm.regression.li
     By default, applies log1p transform to tame skew.
     Returns the fitted statsmodels OLS results.
     """
-    # Ensure required columns exist
+    # Validate
     required = ['Total Sales', 'Meta Spend', 'Google Spend']
-    missing = [col for col in required if col not in df.columns]
+    missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(f"DataFrame missing columns: {missing}")
 
-    df_clean = df.dropna(subset=required).copy()
+    dfc = df.dropna(subset=required).copy()
 
-    # Transform
     if transform == 'log':
-        df_clean['X_meta'] = np.log1p(df_clean['Meta Spend'])
-        df_clean['X_google'] = np.log1p(df_clean['Google Spend'])
+        dfc['X_meta']   = np.log1p(dfc['Meta Spend'])
+        dfc['X_google'] = np.log1p(dfc['Google Spend'])
     else:
-        df_clean['X_meta'] = df_clean['Meta Spend']
-        df_clean['X_google'] = df_clean['Google Spend']
+        dfc['X_meta']   = dfc['Meta Spend']
+        dfc['X_google'] = dfc['Google Spend']
 
-    X = df_clean[['X_meta', 'X_google']]
-    X = sm.add_constant(X)
-    y = df_clean['Total Sales']
-
+    X = sm.add_constant(dfc[['X_meta','X_google']])
+    y = dfc['Total Sales']
     model = sm.OLS(y, X).fit()
     return model
