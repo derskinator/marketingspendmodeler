@@ -15,98 +15,84 @@ shop_files = st.sidebar.file_uploader(
 meta_file = st.sidebar.file_uploader("Upload Meta spend CSV", type="csv")
 google_file = st.sidebar.file_uploader("Upload Google spend CSV", type="csv")
 
-if st.sidebar.button("Run Analysis"):
-    # Validate uploads
-    if not shop_files or not meta_file or not google_file:
-        st.sidebar.error("Please upload all required files before running.")
-    else:
-        # ---- Shopify Data Ingestion ----
-        shop_dfs = []
-        for f in shop_files:
-            df = pd.read_csv(f)
-            df.columns = df.columns.str.strip()
-
-            # Parse month start from filename: look for YYYY-MM-DD
-            m = re.search(r"(\d{4}-\d{2}-\d{2})", f.name)
-            if not m:
-                st.error(f"Could not parse month from filename: {f.name}")
-                st.stop()
-            month_start = pd.to_datetime(m.group(1))
-
-            df["Month Start"] = month_start
-            shop_dfs.append(df)
-
-        shop_df = pd.concat(shop_dfs, ignore_index=True)
-        direct_sales_df = clean_shopify_data(shop_df)
-
-        # ---- Meta Spend Ingestion ----
-        meta_raw = pd.read_csv(meta_file)
-        meta_raw.columns = meta_raw.columns.str.strip()
-        if "Month" not in meta_raw.columns:
-            st.error("Meta CSV missing 'Month' column.")
+# Process when all files are provided
+if shop_files and meta_file and google_file:
+    # --- Shopify Data Ingestion ---
+    shop_dfs = []
+    for f in shop_files:
+        df = pd.read_csv(f)
+        df.columns = df.columns.str.strip()
+        m = re.search(r"(\d{4}-\d{2}-\d{2})", f.name)
+        if not m:
+            st.error(f"Could not parse month from filename: {f.name}")
             st.stop()
-        # split "2023-06-01 - 2023-06-30"
-        meta_raw["Month Start"] = (
-            pd.to_datetime(meta_raw["Month"].str.split(" - ").str[0], errors="coerce")
-        )
-        if "Amount spent (USD)" in meta_raw.columns:
-            meta_clean = meta_raw.rename(
-                columns={"Amount spent (USD)": "Meta Spend"}
-            )[
-                ["Month Start", "Meta Spend"]
-            ]
-        else:
-            st.error("Meta CSV missing 'Amount spent (USD)' column.")
-            st.stop()
+        df['Month Start'] = pd.to_datetime(m.group(1))
+        shop_dfs.append(df)
+    shop_df = pd.concat(shop_dfs, ignore_index=True)
+    direct_sales_df = clean_shopify_data(shop_df)
 
-        # ---- Google Spend Ingestion ----
-        # Skip the header rows if present
-        google_raw = pd.read_csv(google_file, skiprows=2)
-        google_raw.columns = google_raw.columns.str.strip()
-        if "Month" not in google_raw.columns or "Cost" not in google_raw.columns:
-            st.error("Google CSV must have 'Month' and 'Cost' columns.")
-            st.stop()
-        google_raw["Month Start"] = pd.to_datetime(
-            google_raw["Month"], format="%B %Y", errors="coerce"
-        )
-        google_clean = google_raw.rename(columns={"Cost": "Google Spend"})[
-            ["Month Start", "Google Spend"]
-        ]
+    # --- Meta Spend Ingestion ---
+    meta_raw = pd.read_csv(meta_file)
+    meta_raw.columns = meta_raw.columns.str.strip()
+    meta_raw['Month Start'] = pd.to_datetime(
+        meta_raw['Month'].str.split(' - ').str[0], errors='coerce'
+    )
+    meta_clean = meta_raw.rename(columns={'Amount spent (USD)': 'Meta Spend'})[
+        ['Month Start', 'Meta Spend']
+    ]
 
-        # ---- Merge & Display ----
-        merged_df = merge_spend_data(direct_sales_df, meta_clean, google_clean)
-        st.subheader("Merged Sales & Spend Data")
-        st.dataframe(merged_df)
+    # --- Google Spend Ingestion ---
+    google_raw = pd.read_csv(google_file, skiprows=2)
+    google_raw.columns = google_raw.columns.str.strip()
+    google_raw['Month Start'] = pd.to_datetime(
+        google_raw['Month'], format='%B %Y', errors='coerce'
+    )
+    google_clean = google_raw.rename(columns={'Cost': 'Google Spend'})[
+        ['Month Start', 'Google Spend']
+    ]
 
-        # ---- Regression ----
-        model, forecast_fn = run_regression(merged_df)
-        st.subheader("Regression Results")
-        st.write(model.summary())
+    # --- Merge & Regression ---
+    merged_df = merge_spend_data(direct_sales_df, meta_clean, google_clean)
+    model, forecast_fn = run_regression(merged_df)
 
-        # ---- Forecast UI ----
-        st.subheader("Forecast Direct Sales")
-        min_meta, max_meta = (
-            float(merged_df["Meta Spend"].min()),
-            float(merged_df["Meta Spend"].max()),
-        )
-        min_google, max_google = (
-            float(merged_df["Google Spend"].min()),
-            float(merged_df["Google Spend"].max()),
-        )
-        meta_input = st.slider(
-            "Meta Spend", min_meta, max_meta, (min_meta + max_meta) / 2
-        )
-        google_input = st.slider(
-            "Google Spend", min_google, max_google, (min_google + max_google) / 2
-        )
-        if st.button("Forecast Sales"):
-            prediction = forecast_fn(meta_input, google_input)
-            st.metric(label="Predicted Direct Sales", value=f"${prediction:,.2f}")
+    # --- Display Merged Data ---
+    st.subheader("Merged Sales & Spend Data")
+    st.dataframe(merged_df)
 
-        # ---- Visualization ----
-        st.subheader("Historical vs Fitted Direct Sales")
-        X = merged_df[["Meta Spend", "Google Spend"]]
-        X = sm.add_constant(X)
-        merged_df["Fitted"] = model.predict(X)
-        plot_df = merged_df.set_index("Month Start")[["Direct Sales", "Fitted"]]
-        st.line_chart(plot_df)
+    # --- Regression Results ---
+    st.subheader("Regression Results by Channel")
+    coefs = pd.DataFrame({
+        'Coefficient': model.params,
+        'p-value': model.pvalues
+    })
+    st.table(coefs)
+    st.markdown(f"**R-squared:** {model.rsquared:.3f}")
+    st.markdown(
+        f"- A $1 increase in Meta spend is associated with **${model.params['Meta Spend']:.2f}** change in Direct Sales (p={model.pvalues['Meta Spend']:.3f})."
+    )
+    st.markdown(
+        f"- A $1 increase in Google spend is associated with **${model.params['Google Spend']:.2f}** change in Direct Sales (p={model.pvalues['Google Spend']:.3f})."
+    )
+
+    # --- Forecast UI ---
+    st.subheader("Forecast Direct Sales")
+    with st.form("forecast_form"):
+        meta_min, meta_max = merged_df['Meta Spend'].min(), merged_df['Meta Spend'].max()
+        google_min, google_max = merged_df['Google Spend'].min(), merged_df['Google Spend'].max()
+        meta_input = st.slider("Meta Spend", float(meta_min), float(meta_max), float((meta_min+meta_max)/2))
+        google_input = st.slider("Google Spend", float(google_min), float(google_max), float((google_min+google_max)/2))
+        submit = st.form_submit_button("Estimate Sales")
+    if submit:
+        prediction = forecast_fn(meta_input, google_input)
+        st.metric(label="Predicted Direct Sales", value=f"${prediction:,.2f}")
+
+    # --- Historical vs Fitted Chart ---
+    st.subheader("Historical vs Fitted Direct Sales")
+    X = merged_df[['Meta Spend', 'Google Spend']]
+    X = sm.add_constant(X)
+    merged_df['Fitted'] = model.predict(X)
+    chart_df = merged_df.set_index('Month Start')[['Direct Sales', 'Fitted']]
+    st.line_chart(chart_df)
+
+else:
+    st.info("Please upload Shopify exports, Meta spend CSV, and Google spend CSV to run the analysis.")
