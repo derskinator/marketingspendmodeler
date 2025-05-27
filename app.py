@@ -62,7 +62,7 @@ if shop_files and meta_file and google_file:
     # Show merged data
     st.subheader("Merged Total Sales & Spend Data")
     disp = merged_df.copy()
-    disp['Total Sales'] = disp['Total Sales'].map("${:,.2f}".format)
+    disp['Total Sales']  = disp['Total Sales'].map("${:,.2f}".format)
     disp['Meta Spend']   = disp['Meta Spend'].map("${:,.2f}".format)
     disp['Google Spend'] = disp['Google Spend'].map("${:,.2f}".format)
     st.dataframe(disp)
@@ -88,39 +88,45 @@ if shop_files and meta_file and google_file:
 
     # Scenario forecast
     st.subheader("Scenario Forecast")
-    meta_pct   = st.slider("Meta Spend (% of historical)",   0, 200, 100)
-    meta_val   = avg_meta * meta_pct/100
+    meta_pct = st.slider("Meta Spend (% of historical)",   0, 200, 100)
+    meta_val = avg_meta * meta_pct / 100
     st.write(f"Meta Spend (scenario): **${meta_val:,.2f}**")
 
     google_pct = st.slider("Google Spend (% of historical)", 0, 200, 100)
-    google_val = avg_google * google_pct/100
+    google_val = avg_google * google_pct / 100
     st.write(f"Google Spend (scenario): **${google_val:,.2f}**")
 
     if st.button("Run Scenario Forecast"):
-        # Build scenario
+        # Build scenario DataFrame
         scenario = merged_df[['Month Start','Total Sales','Meta Spend','Google Spend']].copy()
-        scenario['Scenario Meta Spend']   = scenario['Meta Spend']   * meta_pct/100
-        scenario['Scenario Google Spend'] = scenario['Google Spend'] * google_pct/100
+        scenario['Scenario Meta Spend']   = scenario['Meta Spend']   * meta_pct / 100
+        scenario['Scenario Google Spend'] = scenario['Google Spend'] * google_pct / 100
+
+        # Predict
         x_meta   = np.log1p(scenario['Scenario Meta Spend'])
         x_google = np.log1p(scenario['Scenario Google Spend'])
-        X_pred   = sm.add_constant(pd.DataFrame({'X_meta':x_meta,'X_google':x_google}))
+        X_pred   = sm.add_constant(pd.DataFrame({'X_meta': x_meta, 'X_google': x_google}))
         scenario['Estimated Sales'] = model.predict(X_pred)
 
         # Calculate increases
-        scenario['Historical Sales']  = scenario['Total Sales']
-        scenario['Dollar Increase']   = scenario['Estimated Sales'] - scenario['Historical Sales']
-        scenario['Pct Increase']      = 100 * scenario['Dollar Increase'] / scenario['Historical Sales']
+        scenario['Historical Sales'] = scenario['Total Sales']
+        scenario['Dollar Increase']  = scenario['Estimated Sales'] - scenario['Historical Sales']
+        scenario['Pct Increase']     = 100 * scenario['Dollar Increase'] / scenario['Historical Sales']
 
-        # Formatting
+        # Format
         scenario['Historical Sales']      = scenario['Historical Sales'].map("${:,.2f}".format)
-        for c in ['Scenario Meta Spend','Scenario Google Spend','Estimated Sales','Dollar Increase']:
-            scenario[c] = scenario[c].map("${:,.2f}".format)
-        scenario['Pct Increase']         = scenario['Pct Increase'].map("{:.2f}%".format)
+        scenario['Meta Spend']            = scenario['Meta Spend'].map("${:,.2f}".format)
+        scenario['Scenario Meta Spend']   = scenario['Scenario Meta Spend'].map("${:,.2f}".format)
+        scenario['Google Spend']          = scenario['Google Spend'].map("${:,.2f}".format)
+        scenario['Scenario Google Spend'] = scenario['Scenario Google Spend'].map("${:,.2f}".format)
+        scenario['Estimated Sales']       = scenario['Estimated Sales'].map("${:,.2f}".format)
+        scenario['Dollar Increase']       = scenario['Dollar Increase'].map("${:,.2f}".format)
+        scenario['Pct Increase']          = scenario['Pct Increase'].map("{:.2f}%".format)
 
         # Chart
         st.line_chart(
             scenario.set_index('Month Start')['Estimated Sales']
-            .str.replace('[$,]','',regex=True).astype(float)
+            .str.replace('[$,]', '', regex=True).astype(float)
         )
 
         # Breakdown table
@@ -128,9 +134,11 @@ if shop_files and meta_file and google_file:
         st.subheader("Month-by-Month Breakdown")
         st.dataframe(
             scenario.set_index('Month')[
-                ['Historical Sales',
+                ['Meta Spend',
                  'Scenario Meta Spend',
+                 'Google Spend',
                  'Scenario Google Spend',
+                 'Historical Sales',
                  'Estimated Sales',
                  'Dollar Increase',
                  'Pct Increase']
@@ -139,5 +147,3 @@ if shop_files and meta_file and google_file:
 
 else:
     st.info("Please upload Shopify, Meta, and Google spend CSVs to run the analysis.")
-
-
