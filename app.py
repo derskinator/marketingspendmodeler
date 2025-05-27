@@ -56,8 +56,8 @@ def load_and_prepare_data():
 if shop_files and meta_file and google_file:
     merged_df = load_and_prepare_data()
 
-    # Regression
-    model, _ = run_regression(merged_df)
+    # Regression with log transform
+    model, _ = run_regression(merged_df, transform='log')
 
     # Display merged data formatted
     st.subheader("Merged Sales & Spend Data")
@@ -75,6 +75,16 @@ if shop_files and meta_file and google_file:
     coefs_display['p-value'] = coefs_display['p-value'].map("{:.3f}".format)
     st.table(coefs_display)
     st.markdown(f"**R-squared:** {model.rsquared:.3f}")
+    # Plain-language summary
+    mean_meta = merged_df['Meta Spend'].mean()
+    mean_google = merged_df['Google Spend'].mean()
+    # Calculate approx marginal effect at average spend
+    beta_meta = model.params['X_meta']
+    beta_google = model.params['X_google']
+    eff_meta = beta_meta / (mean_meta + 1)
+    eff_google = beta_google / (mean_google + 1)
+    st.markdown(f"- At average monthly Meta spend of ${mean_meta:,.2f}, each additional $1 is associated with approximately ${eff_meta:,.2f} increase in Direct Sales.")
+    st.markdown(f"- At average monthly Google spend of ${mean_google:,.2f}, each additional $1 is associated with approximately ${eff_google:,.2f} increase in Direct Sales.")
 
     # Scenario forecasting
     st.subheader("Scenario Forecast")
@@ -87,8 +97,8 @@ if shop_files and meta_file and google_file:
         scenario['Scenario Google Spend'] = scenario['Google Spend'] * google_pct / 100
         scenario['Estimated Sales'] = (
             params['const']
-            + params['Meta Spend'] * scenario['Scenario Meta Spend']
-            + params['Google Spend'] * scenario['Scenario Google Spend']
+            + params['X_meta'] * np.log1p(scenario['Scenario Meta Spend'])
+            + params['X_google'] * np.log1p(scenario['Scenario Google Spend'])
         )
         # Format
         scenario['Meta Spend'] = scenario['Meta Spend'].map("${:,.2f}".format)
@@ -115,7 +125,6 @@ if shop_files and meta_file and google_file:
     merged_df['Direct Sales'] = merged_df['Direct Sales'].map("${:,.2f}".format)
     merged_df['Fitted'] = merged_df['Fitted'].map("${:,.2f}".format)
     hist_display = merged_df.set_index('Month Start')[['Direct Sales', 'Fitted']]
-    # Convert back to float for chart
     chart_df = hist_display.replace('[\$,]', '', regex=True).astype(float)
     st.line_chart(chart_df)
 
